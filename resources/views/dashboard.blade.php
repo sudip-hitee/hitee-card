@@ -549,15 +549,24 @@
             const processNearby = (userLat, userLng) => {
                 $('#nearby-status').html('<i class="bx bx-loader-alt bx-spin me-2"></i> Finding nearby assets...');
 
-                const combined = [
-                    ...allBuses.map(b => ({...b, type: 'bus'})),
-                    ...allParkings.map(p => ({...p, type: 'parking'}))
-                ];
+                const url = `{{ route('dashboard.nearby-assets') }}?lat=${userLat}&lng=${userLng}&radius=5`;
+                fetch(url)
+                    .then(r => { if (!r.ok) throw new Error('nearby failed'); return r.json(); })
+                    .then(data => renderNearby(data.assets))
+                    .catch(() => {
+                        const combined = [
+                            ...allBuses.map(b => ({...b, type: 'bus'})),
+                            ...allParkings.map(p => ({...p, type: 'parking'}))
+                        ];
+                        const nearby = combined.map(item => {
+                            const dist = calculateDistance(userLat, userLng, item.latitude, item.longitude);
+                            return { ...item, distance_km: dist.toFixed(2), duration_min: null, distance_source: 'straight_line' };
+                        }).filter(item => item.distance_km <= 5.0);
+                        renderNearby(nearby);
+                    });
+            };
 
-                const nearby = combined.map(item => {
-                    const dist = calculateDistance(userLat, userLng, item.latitude, item.longitude);
-                    return { ...item, distance_km: dist.toFixed(2) };
-                }).filter(item => item.distance_km <= 5.0);
+            const renderNearby = (nearby) => {
 
                 const busCount = nearby.filter(i => i.type === 'bus').length;
                 const parkingCount = nearby.filter(i => i.type === 'parking').length;
@@ -612,7 +621,9 @@
                     if (customerMap) {
                         L.marker([asset.latitude, asset.longitude], {icon: asset.type === 'bus' ? busIcon : parkingIcon})
                             .addTo(customerMap)
-                            .bindPopup(`<strong>${asset.name}</strong><br>${asset.distance_km} km away`);
+                            .bindPopup(`<strong>${asset.name}</strong><br>${asset.distance_source === 'road' && asset.duration_min != null
+                                ? `${asset.distance_km} km · ${Math.round(asset.duration_min)} min drive`
+                                : `~${asset.distance_km} km away`}`);
                     }
                 });
             };

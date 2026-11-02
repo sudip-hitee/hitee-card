@@ -173,6 +173,81 @@ Route::middleware(['auth'])->group(function () {
         return view('dashboard', compact('userCount', 'busCount', 'parkingCount', 'servicePartnerCount', 'cardCount', 'buses', 'parkings', 'servicePartners', 'openSupportCount'));
     })->name('dashboard');
 
+    // Nearby assets for the dashboard map — road (driving) distances via OSRM,
+    // role-scoped identically to the dashboard query. Falls back to
+    // straight-line distance flagged as such when routing is unavailable.
+    Route::get('/dashboard/nearby-assets', function (Request $request) {
+        $request->validate([
+            'lat'    => 'required|numeric',
+            'lng'    => 'required|numeric',
+            'radius' => 'nullable|numeric',
+        ]);
+
+        $lat = (float) $request->lat;
+        $lng = (float) $request->lng;
+        $radius = max(0.1, min((float) ($request->radius ?? 5), 50));
+
+        $user = auth()->user();
+        $busesQuery = Bus::query()->whereNotNull('latitude')->whereNotNull('longitude');
+        $parkingsQuery = Parking::query()->whereNotNull('latitude')->whereNotNull('longitude');
+
+        if ($user->hasRole('merchant')) {
+            $busesQuery->where('merchant_id', $user->id);
+            $parkingsQuery->where('merchant_id', $user->id);
+        } elseif ($user->hasRole('staff')) {
+            $busesQuery->whereIn('id', $user->assignedBuses->pluck('id'));
+            $parkingsQuery->whereIn('id', $user->assignedParkings->pluck('id'));
+        }
+
+        $haversine = function ($itemLat, $itemLng) use ($lat, $lng) {
+            $dLat = deg2rad($itemLat - $lat);
+            $dLng = deg2rad($itemLng - $lng);
+            $a = sin($dLat / 2) ** 2
+                + cos(deg2rad($lat)) * cos(deg2rad($itemLat)) * sin($dLng / 2) ** 2;
+            return 2 * 6371 * asin(min(1, sqrt($a)));
+        };
+
+        $toAsset = fn ($model, $type) => [
+            'id'        => $model->id,
+            'name'      => $model->name,
+            'type'      => $type,
+            'latitude'  => (float) $model->latitude,
+            'longitude' => (float) $model->longitude,
+        ];
+
+        $assets = collect($busesQuery->get(['id', 'name', 'latitude', 'longitude'])->map(fn ($b) => $toAsset($b, 'bus'))->all())
+            ->merge($parkingsQuery->get(['id', 'name', 'latitude', 'longitude'])->map(fn ($p) => $toAsset($p, 'parking'))->all())
+            ->map(function ($a) use ($haversine, $radius) {
+                $a['straight_distance'] = $haversine($a['latitude'], $a['longitude']);
+                return $a;
+            })
+            ->filter(fn ($a) => $a['straight_distance'] <= $radius)
+            ->values();
+
+        $legs = app(\App\Services\RoutingService::class)->distancesFrom(
+            $lat,
+            $lng,
+            $assets->map(fn ($a) => ['lat' => $a['latitude'], 'lng' => $a['longitude']])->all()
+        );
+
+        $assets = $assets->map(function ($a, $i) use ($legs, $radius) {
+            $leg = $legs[$i] ?? null;
+            // Keep road-distance semantics consistent with the customer API:
+            // a candidate inside the straight-line radius but outside the road
+            // radius is excluded once we know the real road distance.
+            if ($leg !== null && $leg['distance_km'] > $radius) {
+                return null;
+            }
+            $a['distance_km'] = round($leg['distance_km'] ?? $a['straight_distance'], 2);
+            $a['duration_min'] = isset($leg['duration_min']) ? round($leg['duration_min'], 1) : null;
+            $a['distance_source'] = $leg !== null ? 'road' : 'straight_line';
+            unset($a['straight_distance']);
+            return $a;
+        })->filter()->values();
+
+        return response()->json(['assets' => $assets]);
+    })->name('dashboard.nearby-assets');
+
     // Profile Management
     Route::controller(ProfileController::class)->group(function () {
         Route::get('/profile', 'show')->name('profile.show');
