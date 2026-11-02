@@ -36,23 +36,28 @@
         <div class="table-responsive text-nowrap">
             <style>
                 table.data-table {
-                    table-layout: fixed !important;
                     width: 100% !important;
                     margin: 0 !important;
                 }
                 table.data-table th, table.data-table td {
-                    overflow: hidden;
                     white-space: nowrap;
-                    text-overflow: ellipsis;
+                    vertical-align: middle;
                 }
-                table.data-table th:nth-child(1) { width: 50px; }
-                table.data-table th:nth-child(2) { width: 220px; }
-                table.data-table th:nth-child(3) { width: 90px; text-align: center; }
-                table.data-table th:nth-child(4) { width: 150px; }
-                table.data-table th:nth-child(5) { width: 150px; }
-                table.data-table th:nth-child(6) { width: 150px; }
+                table.data-table th:nth-child(1), table.data-table td:nth-child(1) { width: 50px; text-align: center; }
+                table.data-table th:nth-child(3), table.data-table td:nth-child(3) { width: 80px; text-align: center; }
+                table.data-table th:nth-child(4), table.data-table td:nth-child(4) { text-align: center; }
+                table.data-table th:nth-child(5), table.data-table td:nth-child(5) { text-align: center; }
+                table.data-table th:last-child { width: 170px; }
 
-                table.data-table td:nth-child(3) { text-align: center; }
+                .data-table .parking-name {
+                    display: inline-block;
+                    max-width: 240px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    vertical-align: middle;
+                }
+                .parking-map-btn { text-decoration: none; }
+                .parking-map-btn:hover { opacity: .75; }
                 .dark-style table.data-table td { border-color: rgba(255,255,255,0.05) !important; }
             </style>
             <table class="table table-hover data-table">

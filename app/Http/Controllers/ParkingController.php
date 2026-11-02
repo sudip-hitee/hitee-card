@@ -41,7 +41,7 @@ class ParkingController extends Controller
                 ->editColumn('name', function($row) {
                     return '<div class="d-flex align-items-center">
                                 <img src="' . $row->featured_image_url . '" alt="Parking" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;">
-                                <span>' . $row->name . '</span>
+                                <span class="parking-name text-truncate" title="' . e($row->name) . '">' . e($row->name) . '</span>
                             </div>';
                 })
                 ->editColumn('location', function($row) {
@@ -53,11 +53,11 @@ class ParkingController extends Controller
                         return '<span class="text-muted">N/A</span>';
                     }
 
-                    return '<button type="button" class="btn btn-icon btn-sm btn-label-primary parking-map-btn"'
+                    return '<a href="javascript:void(0)" class="parking-map-btn text-primary"'
                         . ' title="' . e($row->location ?: 'View on map') . '"'
                         . ' data-name="' . e($row->name) . '"'
                         . ' data-query="' . e($mapQuery) . '">'
-                        . '<i class="bx bxs-map-pin"></i></button>';
+                        . '<i class="bx bx-map-pin fs-4"></i></a>';
                 })
                 ->addColumn('entry_fee', function($row) {
                     $firstFee = $row->fees->first();
