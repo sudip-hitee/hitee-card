@@ -15,6 +15,10 @@ class ParkingCsvImportService
      */
     private const OSM_TYPE_PREFIX = ['node' => 1, 'way' => 2, 'relation' => 3];
 
+    /** Placeholder used when a row carries no usable photo reference. */
+    private const REFERENCE_IMAGE_URL = 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhhczDiuVM-ZPQ9_otBgJ--__iZVkPAJRT7nqORmV-Pg&s=10';
+    private const REFERENCE_IMAGE_NAME = 'reference.png';
+
     /**
      * Import parking lots from a decoded CSV export. Rows are auto-detected:
      * Google exports carry a `place_id` column, OSM exports an `osm_id` column.
@@ -38,7 +42,7 @@ class ParkingCsvImportService
                 $result[$parking->wasRecentlyCreated ? 'created' : 'updated']++;
 
                 if ($withImages) {
-                    $result['images'] += $this->importImage($parking, $this->imageUrl($row));
+                    $result['images'] += $this->importImage($parking, $row);
                 }
             } catch (\Throwable $e) {
                 $result['failed']++;
@@ -203,26 +207,7 @@ class ParkingCsvImportService
             }
         }
 
-        // No photo reference — fall back to an OpenStreetMap tile centred on
-        // the lot so every parking still gets a representative image.
-        $lat = $this->nullableNumeric(Arr::get($row, 'lat'));
-        $lon = $this->nullableNumeric(Arr::get($row, 'lng') ?? Arr::get($row, 'lon'));
-
-        if ($lat === null || $lon === null) {
-            return '';
-        }
-
-        return $this->osmTileUrl($lat, $lon);
-    }
-
-    private function osmTileUrl(float $lat, float $lon, int $zoom = 17): string
-    {
-        $n = 2 ** $zoom;
-        $x = (int) floor(($lon + 180) / 360 * $n);
-        $latRad = deg2rad($lat);
-        $y = (int) floor((1 - log(tan($latRad) + 1 / cos($latRad)) / M_PI) / 2 * $n);
-
-        return "https://tile.openstreetmap.org/{$zoom}/{$x}/{$y}.png";
+        return '';
     }
 
     private function nullableNumeric(mixed $value): ?float
@@ -247,17 +232,43 @@ class ParkingCsvImportService
     }
 
     /**
-     * The single CSV image becomes the featured image.
-     * Existing media is left untouched on re-imports.
+     * The row's photo becomes the featured image. When the row carries no
+     * usable image reference, the shared placeholder is stored instead with
+     * a "Reference Image" overlay — replacing stale featured media from
+     * earlier imports.
      */
-    private function importImage(Parking $parking, string $url): int
+    private function importImage(Parking $parking, array $row): int
     {
-        if ($url === '' || $parking->media()->exists()) {
+        $url = $this->imageUrl($row);
+
+        if ($url !== '') {
+            if ($parking->media()->exists()) {
+                return 0;
+            }
+
+            try {
+                if ($parking->addMediaFromUrl($url, 'featured')) {
+                    return 1;
+                }
+            } catch (\Throwable) {
+                // Fall through to the reference image.
+            }
+        }
+
+        $featured = $parking->media()->where('collection_name', 'featured');
+        if ($featured->where('file_name', self::REFERENCE_IMAGE_NAME)->exists()) {
             return 0;
         }
 
+        $parking->clearMediaCollection('featured');
+
         try {
-            return $parking->addMediaFromUrl($url, 'featured') ? 1 : 0;
+            return $parking->addMediaFromUrl(
+                self::REFERENCE_IMAGE_URL,
+                'featured',
+                self::REFERENCE_IMAGE_NAME,
+                'Reference Image'
+            ) ? 1 : 0;
         } catch (\Throwable) {
             return 0;
         }

@@ -32,7 +32,7 @@ trait HasMedia
      * Download a remote image and attach it to a media collection.
      * Returns null when the URL can't be fetched or isn't an image.
      */
-    public function addMediaFromUrl(string $url, $collection = 'default', $customName = null)
+    public function addMediaFromUrl(string $url, $collection = 'default', $customName = null, ?string $overlayText = null)
     {
         $host = (string) parse_url($url, PHP_URL_HOST);
         $headers = ['User-Agent' => 'HiteePlatform/1.0 (+https://hitee.ai)'];
@@ -63,10 +63,10 @@ trait HasMedia
             $fileName .= '.png';
         }
 
-        return $this->storeImageMedia($response->body(), $fileName, $collection);
+        return $this->storeImageMedia($response->body(), $fileName, $collection, $overlayText);
     }
 
-    protected function storeImageMedia($contents, string $fileName, string $collection)
+    protected function storeImageMedia($contents, string $fileName, string $collection, ?string $overlayText = null)
     {
         $folder = 'media/' . $collection;
         $path = $folder . '/' . uniqid() . '_' . $fileName;
@@ -85,6 +85,10 @@ trait HasMedia
             $image->scale(width: 1200);
         }
 
+        if ($overlayText !== null) {
+            $this->drawOverlayText($image, $overlayText);
+        }
+
         $encoded = $image->encodeUsingFileExtension('png')->toString();
 
         Storage::disk('public')->put($path, $encoded);
@@ -96,6 +100,34 @@ trait HasMedia
             'mime_type' => 'image/png',
             'size' => strlen($encoded),
         ]);
+    }
+
+    /**
+     * Bottom band + centred label, e.g. "Reference Image" on placeholder photos.
+     */
+    protected function drawOverlayText($image, string $text): void
+    {
+        $fontPath = base_path('vendor/endroid/qr-code/assets/open_sans.ttf');
+        if (!is_file($fontPath)) {
+            return;
+        }
+
+        $w = $image->width();
+        $h = $image->height();
+        $band = max(30, (int) round($h * 0.12));
+
+        $image->drawRectangle(function ($rectangle) use ($w, $h, $band) {
+            $rectangle->at(0, $h - $band);
+            $rectangle->size($w, $band);
+            $rectangle->background('rgba(0, 0, 0, 0.55)');
+        });
+
+        $image->text($text, (int) round($w / 2), (int) round($h - $band / 2), function ($font) use ($fontPath, $band) {
+            $font->filename($fontPath);
+            $font->size((int) round($band * 0.45));
+            $font->color('#ffffff');
+            $font->align('center', 'center');
+        });
     }
 
     public function getFirstMediaUrl($collection = 'default', $default = null)

@@ -197,7 +197,7 @@ class ParkingCsvImportTest extends TestCase
         );
     }
 
-    public function test_row_without_image_url_falls_back_to_osm_tile(): void
+    public function test_row_without_image_url_uses_reference_placeholder(): void
     {
         Storage::fake('public');
         Http::fake(['*' => Http::response(base64_decode(self::PNG), 200, ['Content-Type' => 'image/png'])]);
@@ -207,7 +207,24 @@ class ParkingCsvImportTest extends TestCase
         ], $this->merchant());
 
         $this->assertSame(1, $result['images']);
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'tile.openstreetmap.org'));
-        $this->assertSame(1, Parking::sole()->media()->where('collection_name', 'featured')->count());
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'encrypted-tbn0.gstatic.com'));
+
+        $media = Parking::sole()->media()->where('collection_name', 'featured')->sole();
+        $this->assertSame('reference.png', $media->file_name);
+    }
+
+    public function test_reference_placeholder_replaces_stale_featured_image(): void
+    {
+        Storage::fake('public');
+        Http::fake(['*' => Http::response(base64_decode(self::PNG), 200, ['Content-Type' => 'image/png'])]);
+
+        $service = app(ParkingCsvImportService::class);
+        $service->import([$this->osmRow()], $this->merchant());
+        Parking::sole()->media()->update(['file_name' => 'stale.png']);
+
+        $result = $service->import([$this->osmRow()], $this->merchant());
+
+        $this->assertSame(1, $result['images']);
+        $this->assertSame('reference.png', Parking::sole()->media()->sole()->file_name);
     }
 }
