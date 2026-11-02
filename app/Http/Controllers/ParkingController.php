@@ -21,7 +21,7 @@ class ParkingController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax()) {
-            $query = Parking::with(['merchant', 'fees'])->latest();
+            $query = Parking::with(['fees'])->latest();
             
             // Limit to own parkings if merchant
             if (auth()->user()->hasRole('merchant')) {
@@ -43,6 +43,21 @@ class ParkingController extends Controller
                                 <img src="' . $row->featured_image_url . '" alt="Parking" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;">
                                 <span>' . $row->name . '</span>
                             </div>';
+                })
+                ->editColumn('location', function($row) {
+                    $mapQuery = $row->latitude && $row->longitude
+                        ? $row->latitude . ',' . $row->longitude
+                        : $row->location;
+
+                    if (!$mapQuery) {
+                        return '<span class="text-muted">N/A</span>';
+                    }
+
+                    return '<button type="button" class="btn btn-icon btn-sm btn-label-primary parking-map-btn"'
+                        . ' title="' . e($row->location ?: 'View on map') . '"'
+                        . ' data-name="' . e($row->name) . '"'
+                        . ' data-query="' . e($mapQuery) . '">'
+                        . '<i class="bx bxs-map-pin"></i></button>';
                 })
                 ->addColumn('entry_fee', function($row) {
                     $firstFee = $row->fees->first();
@@ -89,7 +104,7 @@ class ParkingController extends Controller
                     }
                     return $actions;
                 })
-                ->rawColumns(['name', 'status', 'action'])
+                ->rawColumns(['name', 'location', 'status', 'action'])
                 ->make(true);
         }
 
