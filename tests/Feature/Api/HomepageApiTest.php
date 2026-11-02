@@ -153,4 +153,31 @@ class HomepageApiTest extends TestCase
             ]);
         $this->assertArrayHasKey('fees', $response->json('content'));
     }
+
+    /**
+     * Unverified parkings are hidden from customer-facing endpoints.
+     */
+    public function test_unverified_parkings_are_hidden_from_api()
+    {
+        Parking::create([
+            'name' => 'Verified Parking',
+            'location' => 'Kathmandu',
+            'status' => 'opened',
+            'is_hitee_verified' => true,
+        ]);
+
+        $unverified = Parking::create([
+            'name' => 'Unverified Parking',
+            'location' => 'Kathmandu',
+            'status' => 'opened',
+            'is_hitee_verified' => false,
+        ]);
+
+        $response = $this->getJson('/api/parkings');
+        $response->assertStatus(200);
+        $this->assertCount(1, $response->json('content'));
+        $this->assertEquals('Verified Parking', $response->json('content.0.name'));
+
+        $this->getJson('/api/parkings/' . $unverified->id)->assertStatus(404);
+    }
 }

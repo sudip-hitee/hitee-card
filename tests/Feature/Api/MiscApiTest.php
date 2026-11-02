@@ -165,4 +165,37 @@ class MiscApiTest extends TestCase
         $response = $this->getJson('/api/misc/nearby?lat=27.6939&long=85.2817&radius=10&type=bus');
         $this->assertCount(2, $response->json('content.buses'));
     }
+
+    /**
+     * Unverified parkings are excluded from the nearby endpoint.
+     */
+    public function test_unverified_parkings_are_excluded_from_nearby()
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        \App\Models\Parking::create([
+            'name' => 'Verified Parking',
+            'location' => 'Kalanki Chowk',
+            'status' => 'opened',
+            'latitude' => 27.6940,
+            'longitude' => 85.2818,
+            'is_hitee_verified' => true,
+        ]);
+
+        \App\Models\Parking::create([
+            'name' => 'Unverified Parking',
+            'location' => 'Kalanki Chowk',
+            'status' => 'opened',
+            'latitude' => 27.6940,
+            'longitude' => 85.2818,
+            'is_hitee_verified' => false,
+        ]);
+
+        $response = $this->getJson('/api/misc/nearby?lat=27.6939&long=85.2817&radius=1&type=parking');
+
+        $response->assertStatus(200);
+        $this->assertCount(1, $response->json('content.parkings'));
+        $this->assertEquals('Verified Parking', $response->json('content.parkings.0.name'));
+    }
 }

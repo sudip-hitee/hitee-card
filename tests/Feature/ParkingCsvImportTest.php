@@ -147,8 +147,23 @@ class ParkingCsvImportTest extends TestCase
 
         $this->assertSame(1, Parking::count());
         $this->assertSame(1, $result['updated']);
-        $this->assertSame('Parking (OSM way/172495780)', Parking::sole()->name);
+        $this->assertSame('Parking Lot', Parking::sole()->name);
         $this->assertSame(60, Parking::sole()->total_capacity);
+    }
+
+    public function test_unclear_names_are_renamed_to_parking_lot(): void
+    {
+        $service = app(ParkingCsvImportService::class);
+
+        $service->import([
+            $this->osmRow(['osm_id' => 'way/1', 'name' => '']),
+            $this->osmRow(['osm_id' => 'way/2', 'name' => 'Parking (OSM way/2)']),
+            $this->osmRow(['osm_id' => 'way/3', 'name' => 'OSM way/3']),
+            $this->osmRow(['osm_id' => 'way/4', 'name' => 'Clear Name Parking']),
+        ], $this->merchant(), false);
+
+        $this->assertSame(3, Parking::where('name', 'Parking Lot')->count());
+        $this->assertSame(1, Parking::where('name', 'Clear Name Parking')->count());
     }
 
     public function test_osm_node_and_way_ids_do_not_collide(): void
@@ -165,5 +180,34 @@ class ParkingCsvImportTest extends TestCase
             [1172495780, 2172495780],
             Parking::pluck('external_id')->all()
         );
+    }
+
+    public function test_google_image_requests_send_browser_headers(): void
+    {
+        Storage::fake('public');
+        Http::fake(['*' => Http::response(base64_decode(self::PNG), 200, ['Content-Type' => 'image/jpeg'])]);
+
+        app(ParkingCsvImportService::class)->import([
+            $this->googleRow(['image_url' => 'https://streetviewpixels-pa.googleapis.com/v1/thumbnail?panoid=abc']),
+        ], $this->merchant());
+
+        Http::assertSent(fn ($request) =>
+            $request->hasHeader('Referer', 'https://www.google.com/')
+            && str_contains($request->header('User-Agent')[0] ?? '', 'Mozilla')
+        );
+    }
+
+    public function test_row_without_image_url_falls_back_to_osm_tile(): void
+    {
+        Storage::fake('public');
+        Http::fake(['*' => Http::response(base64_decode(self::PNG), 200, ['Content-Type' => 'image/png'])]);
+
+        $result = app(ParkingCsvImportService::class)->import([
+            $this->osmRow(['image_links' => '']),
+        ], $this->merchant());
+
+        $this->assertSame(1, $result['images']);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'tile.openstreetmap.org'));
+        $this->assertSame(1, Parking::sole()->media()->where('collection_name', 'featured')->count());
     }
 }

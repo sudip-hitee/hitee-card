@@ -34,7 +34,17 @@ trait HasMedia
      */
     public function addMediaFromUrl(string $url, $collection = 'default', $customName = null)
     {
-        $response = Http::timeout(20)->retry(2, 500)->get($url);
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        $headers = ['User-Agent' => 'HiteePlatform/1.0 (+https://hitee.ai)'];
+
+        // Google photo/streetview thumbnails only respond to a browser-like
+        // request referred from google.com; other hosts get an identifiable UA.
+        if (str_contains($host, 'google')) {
+            $headers['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+            $headers['Referer'] = 'https://www.google.com/';
+        }
+
+        $response = Http::timeout(20)->retry(2, 500)->withHeaders($headers)->get($url);
 
         if (!$response->successful()) {
             return null;

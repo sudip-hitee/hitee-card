@@ -143,7 +143,8 @@ class HomepageController extends Controller
 
         $query = Parking::with(['merchant:id,name', 'attributes:id,name,icon', 'media', 'fees'])
             ->withCount('ongoingRides')
-            ->where('status', 'opened');
+            ->where('status', 'opened')
+            ->where('is_hitee_verified', true);
 
         // Search by name or location
         if ($request->filled('search')) {
@@ -318,7 +319,9 @@ class HomepageController extends Controller
     public function showParking($id)
     {
         $parking = Parking::with(['merchant:id,name', 'attributes:id,name,icon', 'media', 'fees'])
-            ->withCount('ongoingRides')->find($id);
+            ->withCount('ongoingRides')
+            ->where('is_hitee_verified', true)
+            ->find($id);
 
         if (!$parking) {
             return apiResponse(false, 'Parking not found', '', 404);

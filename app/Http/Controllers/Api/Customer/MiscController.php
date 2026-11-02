@@ -65,6 +65,7 @@ class MiscController extends Controller
         if (!$type || $type === 'parking') {
             $sets['parkings'] = Parking::with(['merchant:id,name', 'attributes:id,name,icon', 'media'])
                 ->where('status', 'opened')
+                ->where('is_hitee_verified', true)
                 ->select('*')
                 ->selectRaw("{$haversine} AS straight_distance", $haversineBindings)
                 ->whereRaw("{$haversine} <= ?", [...$haversineBindings, $radius])

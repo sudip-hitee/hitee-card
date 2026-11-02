@@ -58,8 +58,8 @@ class ParkingCsvImportService
 
     private function importGoogleRow(array $row, User $merchant): Parking
     {
-        $name = trim((string) Arr::get($row, 'name', ''));
-        if ($name === '') {
+        $name = $this->cleanName(Arr::get($row, 'name', ''));
+        if (trim((string) Arr::get($row, 'name', '')) === '') {
             throw new \InvalidArgumentException('missing name');
         }
 
@@ -86,8 +86,9 @@ class ParkingCsvImportService
     {
         $osmId = trim((string) Arr::get($row, 'osm_id', ''));
 
-        // Unnamed OSM lots get a deterministic name so re-imports stay idempotent.
-        $name = trim((string) Arr::get($row, 'name', '')) ?: "Parking (OSM {$osmId})";
+        // Unclear names — empty, or referencing the source (OSM ids, "Parking
+        // (OSM way/…)" from earlier imports) — collapse to a generic label.
+        $name = $this->cleanName(Arr::get($row, 'name', ''));
 
         $externalId = $this->encodeOsmId($osmId);
         $match = $externalId !== null
@@ -110,6 +111,17 @@ class ParkingCsvImportService
                 'is_hitee_verified' => false,
             ]
         );
+    }
+
+    private function cleanName(mixed $name): string
+    {
+        $name = trim((string) $name);
+
+        if ($name === '' || stripos($name, 'osm') !== false || preg_match('#^(node|way|relation)/#i', $name)) {
+            return 'Parking Lot';
+        }
+
+        return $name;
     }
 
     private function encodeOsmId(string $osmId): ?int
@@ -191,7 +203,26 @@ class ParkingCsvImportService
             }
         }
 
-        return '';
+        // No photo reference — fall back to an OpenStreetMap tile centred on
+        // the lot so every parking still gets a representative image.
+        $lat = $this->nullableNumeric(Arr::get($row, 'lat'));
+        $lon = $this->nullableNumeric(Arr::get($row, 'lng') ?? Arr::get($row, 'lon'));
+
+        if ($lat === null || $lon === null) {
+            return '';
+        }
+
+        return $this->osmTileUrl($lat, $lon);
+    }
+
+    private function osmTileUrl(float $lat, float $lon, int $zoom = 17): string
+    {
+        $n = 2 ** $zoom;
+        $x = (int) floor(($lon + 180) / 360 * $n);
+        $latRad = deg2rad($lat);
+        $y = (int) floor((1 - log(tan($latRad) + 1 / cos($latRad)) / M_PI) / 2 * $n);
+
+        return "https://tile.openstreetmap.org/{$zoom}/{$x}/{$y}.png";
     }
 
     private function nullableNumeric(mixed $value): ?float
