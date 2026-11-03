@@ -100,10 +100,13 @@ jobs:
           key: ${{ secrets.STG_SSH_KEY }}
           port: ${{ secrets.STG_SSH_PORT }}
           script: |
+            set -e
+
             cd /var/www/card-stg.hitee.ai
 
             # Pull latest code
             git pull origin develop
+            git rev-parse HEAD
 
             # Install dependencies
             composer install --optimize-autoloader
