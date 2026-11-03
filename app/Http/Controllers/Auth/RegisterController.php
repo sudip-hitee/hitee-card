@@ -35,8 +35,6 @@ class RegisterController extends Controller
             'is_tourist' => $request->boolean('is_tourist'),
         ]);
 
-        $user->issueTransitCard();
-
         $user->sendEmailVerificationNotification();
 
         logActivity('registration', 'New user registered', [], $user->id);

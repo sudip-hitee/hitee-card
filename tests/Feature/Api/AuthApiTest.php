@@ -48,6 +48,9 @@ class AuthApiTest extends TestCase
             'phone_number' => '9812345678',
             'status' => User::STATUS_PENDING,
         ]);
+
+        $user = User::where('email', 'test@example.com')->first();
+        $this->assertCount(0, $user->cards);
     }
 
     /**

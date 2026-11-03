@@ -44,8 +44,6 @@ class AuthController extends Controller
             'status' => User::STATUS_PENDING,
         ]);
 
-        $user->issueTransitCard();
-
         if ($request->fcm_token) {
             FcmToken::updateOrCreate(
                 ['token' => $request->fcm_token],
